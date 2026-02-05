@@ -153,42 +153,42 @@ def format_search_query(user_query, websearch_key, reasoning):
 
 
 
-fact_check_search_query_prompt = PromptTemplate(
-    input_variables=["search_query", "reasoning"],
-    template="""
-You are a search-query fact checker.
+# fact_check_search_query_prompt = PromptTemplate(
+#     input_variables=["search_query", "reasoning"],
+#     template="""
+# You are a search-query fact checker.
 
-Your task:
-- Check whether each search query is relevant to the user's intent based on the reasoning.
-- Remove vague, redundant, or irrelevant queries.
-- Keep only queries that are suitable for a web search tool like Tavily.
+# Your task:
+# - Check whether each search query is relevant to the user's intent based on the reasoning.
+# - Remove vague, redundant, or irrelevant queries.
+# - Keep only queries that are suitable for a web search tool like Tavily.
 
-RULES:
-- Do NOT add new queries.
-- Do NOT rewrite queries unless needed for clarity.
-- Output MUST be a Python list of strings.
-- No explanation, no extra text.
+# RULES:
+# - Do NOT add new queries.
+# - Do NOT rewrite queries unless needed for clarity.
+# - Output MUST be a Python list of strings.
+# - No explanation, no extra text.
 
-Search Queries:
-{search_query}
+# Search Queries:
+# {search_query}
 
-Reasoning Context:
-{reasoning}
-"""
-)
+# Reasoning Context:
+# {reasoning}
+# """
+# )
 
-import re
-import ast
-from typing import List, Union
+# import re
+# import ast
+# from typing import List, Union
 
-def fact_check_search_queries(search_query, reasoning):
-    response = llm.invoke(
-        fact_check_search_query_prompt.format(
-            search_query=search_query,
-            reasoning=reasoning
-        )
-    )
-    return response.content.strip()
+# def fact_check_search_queries(search_query, reasoning):
+#     response = llm.invoke(
+#         fact_check_search_query_prompt.format(
+#             search_query=search_query,
+#             reasoning=reasoning
+#         )
+#     )
+#     return response.content.strip()
 
     
 
