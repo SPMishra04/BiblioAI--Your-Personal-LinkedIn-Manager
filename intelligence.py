@@ -22,7 +22,7 @@ restricted_prompt = ChatPromptTemplate.from_messages([
     (
         "system",
         """
-You are a **content safety gate** for a LinkedIn post generation system. You are going to get the content from the user to be posted on linked In. Your role is to go through that content decide whether to post it on linked in or not, with some editing. You must carefully analyze the user query and decide whether it contains ANY of the following, you must not invent restrictions:
+You are the**content safety gate** for a LinkedIn post generation system. You are going to get the content from the user to be posted on linked In. Your role is to go through that content decide whether to post it on linked in or not, with some editing. You must carefully analyze the user query and decide whether it contains ANY of the following, you must not invent restrictions:
 STRICTLY DISALLOWED (BLOCK IMMEDIATELY):
 - Pornographic or explicit sexual content
 - Sexual content involving minors (zero tolerance)
