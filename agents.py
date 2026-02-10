@@ -370,6 +370,7 @@ After writing the post, decide:
   - Pure personal story, poem, or reflection  
   - Creative writing  
   - Simple opinion  
+  
 
 If needs_references = true, also provide:
 reference_topic = a short topic Tavily can search, e.g.
