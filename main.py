@@ -1,4 +1,4 @@
-from agents import run_llm1, run_llm2, run_llm3
+from agents import *
 from tavily_clients import tavily_search, compress_tavily_results
 from config import MAX_CLARIFICATION_TURNS, NUM_SEARCH_QUERIES
 import tiktoken
@@ -39,23 +39,27 @@ Conversation so far:
 {context_text}
 """
 
-        llm1_output = run_llm1(combined_input, NUM_SEARCH_QUERIES, qa_history)
+        gate_keeper_output = run_gate_keeper(combined_input, NUM_SEARCH_QUERIES, qa_history)
 
         # -------- TRUE UNSAFE CONTENT ONLY --------
-        if llm1_output.get("allowed") is False and not llm1_output.get("clarification_question"):
-            print("\nBLOCKED:")
-            print(llm1_output.get("message"))
+        
+        
+        if gate_keeper_output.get("allowed") is False:
+            print("\nBLOCKED (UNSAFE CONTENT):")
+            # print(gate_keeper_output.get("message"))
+            print(gate_keeper_output)
             return
 
         
 
         # ===== CASE 1 — NEED MORE INFO (VAGUE INPUT) =====
-        clarification_q = llm1_output.get("clarification_question")
+        clarification_q = gate_keeper_output.get("clarification_question")
 
 # ===== CASE A — UNSAFE CONTENT (IMMEDIATE BLOCK) =====
-        if llm1_output.get("allowed") is False:
-            print("\nBLOCKED (UNSAFE CONTENT):")
-            print(llm1_output.get("message"))
+        if gate_keeper_output.get("allowed") is False and not gate_keeper_output.get("clarification_question"):
+            print("\nBLOCKED:")
+            # print(gate_keeper_output.get("message"))
+            print(gate_keeper_output)
             return
 
         # ===== CASE B — SAFE BUT VAGUE → ASK QUESTION =====
@@ -101,32 +105,33 @@ Conversation:
     # PHASE 2 — FACT CHECK DECISION AGAIN
     # ============================
     print("\nRe-running Gatekeeper LLM...\n")
-    llm1_output = run_llm1(user_query, NUM_SEARCH_QUERIES, None)
+    gate_keeper_output = run_gate_keeper(user_query, NUM_SEARCH_QUERIES, None)
 
     tokens_in_llm_request = 0
 
     # ===== FACT CHECK PATH =====
-    if llm1_output.get("fact_check_required", False):
+    fact_checker_output = {}
+    if gate_keeper_output.get("fact_check_required", False):
 
         print("\nRunning Tavily Web Search...\n")
-        raw_results = tavily_search(llm1_output.get("search_queries", []))
+        raw_results = tavily_search(gate_keeper_output.get("search_queries", []))
         web_results = compress_tavily_results(raw_results)
 
         print("\nRunning fact_checker_llm (Fact Verification)...\n")
-        llm2_output = run_llm2(user_query, web_results)
+        fact_checker_output = run_fact_checker(user_query, web_results)
 
         tokens_in_llm_request = count_tokens(user_query)
 
         # ---- NEW SAFE HANDLING ----
-        if not llm2_output.get("is_true", False):
+        if not fact_checker_output.get("is_true", False):
 
             print("\nCLAIM REJECTED BY fact_checker_llm\n")
 
             print("LLM VERDICT & REASON:\n")
-            print(llm2_output.get("correction_if_any", "No explanation provided"))
+            print(fact_checker_output.get("correction_if_any", "No explanation provided"))
 
             # print("\n🔗 Evidence URLs used by LLM:\n")
-            for url in llm2_output.get("evidence_urls", []):
+            for url in fact_checker_output.get("evidence_urls", []):
                 print(" •", url)
 
             return
@@ -136,11 +141,11 @@ Conversation:
 
         tokens_in_llm_request = count_tokens(user_query)
 
-        llm3_output = run_llm3(
+        post_generator_output = run_post_generator(
             final_query=user_query,
             source="tavily",
             tavily_context=web_results,
-            verified_facts=llm2_output.get("verified_facts")
+            verified_facts=fact_checker_output.get("verified_facts")
         )
 
     # ===== NO FACT CHECK PATH =====
@@ -149,25 +154,21 @@ Conversation:
 
         tokens_in_llm_request = count_tokens(user_query)
 
-        llm3_output = run_llm3(
+        post_generator_output = run_post_generator(
         final_query=user_query,
-        source="llm1",
-        llm1_understanding=llm1_output.get("Gatekeeper LLM understanding"),
-        user_intent=llm1_output.get("user_intent")
+        source="gate_keeper",
+        gate_keeper_understanding=gate_keeper_output.get("Gatekeeper LLM understanding"),
+        user_intent=gate_keeper_output.get("user_intent")
     )
 
-
-    # ============================
-    # PRINT FINAL POST
-    # ============================
-    # print("\n===== FINAL LINKEDIN POST =====\n")
-    # post = llm3_output.get("formatted_post", "")
-    # print(post.encode("utf-8", errors="replace").decode("utf-8"))
+    
+    print("\nGate_Keeper Output:" , gate_keeper_output , "\n")
+    print("\nFact_Checker Output" , fact_checker_output , "\n")
 
 
     print("\n===== FINAL LINKEDIN POST =====\n")
 
-    post = llm3_output.get("formatted_post", "")
+    post = post_generator_output.get("formatted_post", "")
 
     tokens_in_final_post = count_tokens(post)
 
@@ -176,41 +177,97 @@ Conversation:
 
     print(post.encode("utf-8", errors="replace").decode("utf-8"))
 
+        # ===== NEW: CONDITIONAL OUTPUT PHASE =====
 
-    # ===== NEW: CONDITIONAL REFERENCES PHASE =====
-    if llm3_output.get("need_references", False):
+    show_refs = post_generator_output.get("show_references", False)
+    show_recs = post_generator_output.get("show_recommendations", False)
+    show_sugs = post_generator_output.get("show_suggestions", False)
 
-        print("\nFetching references from Tavily...\n")
+    # ---------------- CASE 1: REFERENCES ----------------
+    if show_refs:
 
-        queries = llm3_output.get("reference_queries", [])
+        print("\n🔎 Fetching references from Tavily...\n")
+
+        queries = post_generator_output.get("reference_queries", [])
 
         raw_results = tavily_search(queries)
         web_results = compress_tavily_results(raw_results)
 
-        print("\nREFERENCES & FURTHER READING:\n")
+        print("\n📚 REFERENCES & FURTHER READING:\n")
 
         for item in web_results:
-            print(f"Topic: {item['query']}")
+            print(f"🔹 Topic: {item['query']}")
             for snip in item["snippets"]:
                 print(f" • {snip['url']}")
             print("\n")
 
-        # Optional: show LLM recommendations too
-        recs = llm3_output.get("recommendations", [])
-        if recs:
-            print("RECOMMENDATIONS:\n")
-            for r in recs:
-                print(" •", r)
+    # ---------------- CASE 2: RECOMMENDATIONS ----------------
+    elif show_recs:
 
+        recs = post_generator_output.get("recommendations", [])
+
+        print("\n💡 RECOMMENDATIONS:\n")
+        for r in recs:
+            print(" •", r)
+
+    # ---------------- CASE 3: SUGGESTIONS ----------------
+    elif show_sugs:
+
+        sugs = post_generator_output.get("suggestions", [])
+
+        print("\n🧠 ALTERNATIVE TOPIC SUGGESTIONS:\n")
+        for s in sugs:
+            print(" •", s)
+
+    # ---------------- CASE 4: NOTHING NEEDED ----------------
     else:
-        print("\npost_generator_llm decided no references were required.\n")
-
-
-if __name__ == "__main__":
-    main()
+        print("\nℹ️ LLM decided no references, recommendations, or suggestions were required.\n")
 
 
 
+#     print("\n===== FINAL LINKEDIN POST =====\n")
+
+#     post = post_generator_output.get("formatted_post", "")
+
+#     tokens_in_final_post = count_tokens(post)
+
+#     print(f"Tokens in LLM request: {tokens_in_llm_request}")
+#     print(f"Tokens in final post: {tokens_in_final_post}\n")
+
+#     print(post.encode("utf-8", errors="replace").decode("utf-8"))
+
+
+#     # ===== NEW: CONDITIONAL REFERENCES PHASE =====
+#     if post_generator_output.get("need_references", False):
+
+#         print("\nFetching references from Tavily...\n")
+
+#         queries = post_generator_output.get("reference_queries", [])
+
+#         raw_results = tavily_search(queries)
+#         web_results = compress_tavily_results(raw_results)
+
+#         print("\nREFERENCES & FURTHER READING:\n")
+
+#         for item in web_results:
+#             print(f"Topic: {item['query']}")
+#             for snip in item["snippets"]:
+#                 print(f" • {snip['url']}")
+#             print("\n")
+
+#         # Optional: show LLM recommendations too
+#         recs = post_generator_output.get("recommendations", [])
+#         if recs:
+#             print("RECOMMENDATIONS:\n")
+#             for r in recs:
+#                 print(" •", r)
+
+#     else:
+#         print("\npost_generator_llm decided no references were required.\n")
+
+
+# if __name__ == "__main__":
+#     main()
 
 
 
@@ -228,7 +285,10 @@ if __name__ == "__main__":
 
 
 
-# from agents import run_llm1, run_llm2, run_llm3
+
+
+
+# from agents import gate_keeper, fact_checker, post_generator
 # from tavily_clients import tavily_search, compress_tavily_results
 # from config import MAX_CLARIFICATION_TURNS, NUM_SEARCH_QUERIES
 
@@ -248,7 +308,7 @@ if __name__ == "__main__":
 
 #     while turn < MAX_CLARIFICATION_TURNS:
 
-#         print(f"\n🔹 Running LLM1 (Turn {turn+1})...\n")
+#         print(f"\n🔹 Running gate_keeper (Turn {turn+1})...\n")
 
 #         context_text = "\n".join(qa_history) if qa_history else "None"
 
@@ -260,15 +320,15 @@ if __name__ == "__main__":
 # {context_text}
 # """
 
-#         llm1_output = run_llm1(combined_input, NUM_SEARCH_QUERIES, qa_history)
+#         gate_keeper_output = gate_keeper(combined_input, NUM_SEARCH_QUERIES, qa_history)
 
 #         # ---- HARD BLOCK: truly unsafe content ----
-#         if llm1_output.get("allowed") is False and not llm1_output.get("clarification_question"):
+#         if gate_keeper_output.get("allowed") is False and not gate_keeper_output.get("clarification_question"):
 #             print("\n❌ BLOCKED (UNSAFE CONTENT):")
-#             print(llm1_output.get("message"))
+#             print(gate_keeper_output.get("message"))
 #             return
 
-#         clarification_q = llm1_output.get("clarification_question")
+#         clarification_q = gate_keeper_output.get("clarification_question")
 
 #         # ---- SAFE BUT VAGUE → ASK USER ----
 #         if clarification_q:
@@ -311,61 +371,61 @@ if __name__ == "__main__":
 #     # PHASE 2 — FACT CHECK DECISION
 #     # ============================
 #     print("\n🔁 Re-running fact-check decision...\n")
-#     llm1_output = run_llm1(user_query, NUM_SEARCH_QUERIES, None)
+#     gate_keeper_output = gate_keeper(user_query, NUM_SEARCH_QUERIES, None)
 
-#     if llm1_output.get("fact_check_required", False):
+#     if gate_keeper_output.get("fact_check_required", False):
 
 #         print("\n🌐 Running Tavily Web Search...\n")
-#         raw_results = tavily_search(llm1_output.get("search_queries", []))
+#         raw_results = tavily_search(gate_keeper_output.get("search_queries", []))
 #         web_results = compress_tavily_results(raw_results)
 
-#         print("\n🔹 Running LLM2 (Fact Verification)...\n")
-#         llm2_output = run_llm2(user_query, web_results)
+#         print("\n🔹 Running fact_checker (Fact Verification)...\n")
+#         fact_checker_output = fact_checker(user_query, web_results)
 
-#         if not llm2_output.get("is_true", False):
+#         if not fact_checker_output.get("is_true", False):
 
-#             print("\n❌ CLAIM REJECTED BY LLM2\n")
-#             print("📌 Reason:\n", llm2_output.get("correction_if_any", "No explanation"))
+#             print("\n❌ CLAIM REJECTED BY fact_checker\n")
+#             print("📌 Reason:\n", fact_checker_output.get("correction_if_any", "No explanation"))
 #             print("\n🔗 Evidence URLs:\n")
 
-#             for url in llm2_output.get("evidence_urls", []):
+#             for url in fact_checker_output.get("evidence_urls", []):
 #                 print(" •", url)
 
 #             return
 
 #         print("\n✅ Fact Verified — Proceeding to Post Generation\n")
 
-#         llm3_output = run_llm3(
+#         post_generator_output = post_generator(
 #             final_query=user_query,
 #             source="tavily",
 #             tavily_context=web_results,
-#             verified_facts=llm2_output.get("verified_facts")
+#             verified_facts=fact_checker_output.get("verified_facts")
 #         )
 
 #     else:
-#         print("\n➡️ No fact check needed — using LLM1 context.\n")
+#         print("\n➡️ No fact check needed — using gate_keeper context.\n")
 
-#         llm3_output = run_llm3(
+#         post_generator_output = post_generator(
 #             final_query=user_query,
-#             source="llm1",
-#             llm1_understanding=llm1_output.get("llm1_understanding")
+#             source="gate_keeper",
+#             gate_keeper_understanding=gate_keeper_output.get("gate_keeper_understanding")
 #         )
 
 #     # ============================
 #     # PRINT FINAL POST
 #     # ============================
 #     print("\n===== FINAL LINKEDIN POST =====\n")
-#     post = llm3_output.get("formatted_post", "")
+#     post = post_generator_output.get("formatted_post", "")
 #     print(post.encode("utf-8", errors="replace").decode("utf-8"))
 
 #     # ============================
 #     # CONDITIONAL REFERENCES PHASE
 #     # ============================
-#     if llm3_output.get("needs_references", False):
+#     if post_generator_output.get("needs_references", False):
 
 #         print("\n🔎 Fetching references from Tavily...\n")
 
-#         topic = llm3_output.get("reference_topic")
+#         topic = post_generator_output.get("reference_topic")
 #         raw_results = tavily_search([topic])
 #         web_results = compress_tavily_results(raw_results)
 
@@ -381,5 +441,5 @@ if __name__ == "__main__":
 #         print("\nℹ️ LLM decided no references were required.\n")
 
 
-# if __name__ == "__main__":
-#     main()
+if __name__ == "__main__":
+    main()
