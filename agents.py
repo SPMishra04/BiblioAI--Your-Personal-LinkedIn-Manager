@@ -499,6 +499,9 @@ If yes → you must suggest safer rewrites instead of blocking.
 
 DECISION LOGIC- (MANDATORY FLOW)
 
+Even if a factual claim seems incorrect, DO NOT block.
+Instead, set fact_check_required = true and pass it to fact_checker.
+
 If content clearly violates STRICTLY DISALLOWED and CANNOT be rewritten:
  allowed = false  
  message = polite, neutral warning asking the user to change the topic  
