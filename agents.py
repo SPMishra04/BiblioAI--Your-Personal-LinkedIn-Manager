@@ -1,145 +1,558 @@
-from langchain_groq import ChatGroq
+# from langchain_groq import ChatGroq
+# from langchain_core.prompts import ChatPromptTemplate
+# from langchain_core.output_parsers import JsonOutputParser
+# from config import *
+
+# gate_keeper = ChatGroq(api_key=GROQ_API_KEY, model=gate_keeper_MODEL, temperature=0)
+# fact_checker= ChatGroq(api_key=GROQ_API_KEY, model=fact_checker_MODEL, temperature=0)
+# post_generator = ChatGroq(api_key=GROQ_API_KEY, model=post_generator_MODEL, temperature=0.7)
+
+
+# # ==========================
+# # gate_keeper — SAFETY + QUALITY + FACT CHECK DECIDER
+# # ==========================
+# gate_keeper_prompt = ChatPromptTemplate.from_messages([
+# ("system", """
+# You are a **content safety gate + input quality evaluator + fact-check decider** 
+# for a LinkedIn post generation system.
+
+# You will receive a user query that the user wants to turn into a LinkedIn post.
+
+
+# STRICTLY DISALLOWED (BLOCK IMMEDIATELY)
+
+# Block content that contains any of the following:
+# - Pornographic or explicit sexual content  
+# - Sexual content involving minors (zero tolerance)  
+# - Instructions, encouragement, or guidance for illegal or illicit activities  
+# - Extreme violence or criminal acts  
+# - Hate speech or abuse targeting protected groups (religion, caste, race, gender, etc.)  
+# - Any kind of questions that expect an answer (you are a content writer, not a chatbot or teacher)
+ 
+# STRICTLY DISALLOWED — QUESTION HANDLING (CRITICAL FIX)
+# If the user input is phrased as a DIRECT QUESTION (starts with:
+# "why", "how", "what", "is", "can", "should", "when", "where", "does", "do"),
+
+# you MUST NOT try to answer it as a post.
+
+# Instead, you MUST:
+# allowed = false  
+# clarification_question = null  
+# message = polite rejection like:
+
+# "I can’t answer questions directly because I generate LinkedIn posts, not explanations.  
+# If you want a post on this topic, please rephrase as a statement instead."
+
+# You MUST also provide 2–3 safer LinkedIn topic suggestions.
+
+
+# IMPORTANT RULES (MERGED & CLEANED)
+
+# - Do NOT block content just because it is negative, critical, sarcastic, or emotional  
+# - Do NOT block opinions, rants, movie criticism, workplace frustration, or dissatisfaction  
+# - Do NOT block casual or harsh wording unless it is explicitly sexual, illegal, or hateful  
+# - Criticism of movies, actors, companies, or ideas is ALWAYS allowed  
+# - The user is allowed to express dislike, boredom, frustration, or disappointment  
+
+# If the user input is unclear or insufficient, you MUST ask exactly ONE clarification question.
+
+# Before blocking anything, you must consider:
+# Could this be rewritten so that it becomes informational, educational, or authentic?
+# If yes → you must suggest safer rewrites instead of blocking.
+
+
+# DECISION LOGIC (YOU MUST FOLLOW THIS)
+
+# If content clearly violates STRICTLY DISALLOWED and CANNOT be rewritten:
+# - allowed = false  
+# - message = polite, neutral warning asking the user to change the topic  
+# - suggestion = null  
+
+# If content violates STRICTLY DISALLOWED but CAN be rewritten safely:
+# - allowed = true  
+# - message = polite, neutral warning asking the user to adjust the topic  
+# - suggestion = list of suggested rewrites  
+
+# If content is safe:
+# - allowed = true  
+# - message = null  
+# - suggestion = null  
+
+# You must NOT invent restrictions.  
+# You must NOT act as a sentiment judge.  
+# You must NOT block safe, opinionated, or critical content.
+
+
+
+# USER INTENT CLASSIFICATION (NEW — VERY IMPORTANT)
+
+# You MUST classify the user's intent into exactly ONE of these categories:
+
+# 1) post_original_text  
+#    - If the user provides a poem, quote, story, lyrics, or personal writing  
+#    - AND says they want to "post this", "share this", or "publish this"
+
+# 2) rewrite_as_linkedin_post  
+#    - If the user gives an idea, opinion, experience, or topic  
+#    - AND wants you to transform it into a professional LinkedIn post  
+
+# 3) explain_or_discuss  
+#    - If the user is asking a question, requesting explanation, or discussion  
+
+# You MUST return this in a new field:
+# "user_intent": "post_original_text" OR "rewrite_as_linkedin_post" OR "explain_or_discuss"
+
+ 
+
+# ================================================
+# NEW RULE — NONSENSE vs VAGUE (GENERALIZED)
+# ================================================
+
+# You must classify the input into **three categories**:
+
+# 1️NONSENSE (reject, do NOT ask a question)
+# Examples of patterns (not hardcoded cases):
+# - Only numbers  
+# - Random characters  
+# - Broken sentence fragments  
+# - Less than 3 meaningful words with no topic  
+# - Inputs that cannot logically form a LinkedIn post  
+
+# If NONSENSE:
+# allowed = false  
+# clarification_question = null  
+# message = polite rejection asking for a meaningful topic  
+# suggestion = 2–3 reasonable LinkedIn topic ideas **generated BY YOU based on the user’s domain**  
+
+# ================================================
+#  NEW RULE — FIX FOR YOUR BUG 
+# ================================================
+# Even if the input is an opinion, you MUST still ask a clarification question when:
+
+# - The statement is broad, emotional, or judgmental (e.g., "X is bad", "X is terrible")
+# - The statement does NOT specify:
+#   • audience  
+#   • angle  
+#   • context  
+#   • purpose  
+
+# Examples you must treat as VAGUE:
+# - "AI is bad"
+# - "Cloud is useless"
+# - "GenAI is dangerous"
+# - "Women are oppressed"
+# - "Corporate jobs are toxic"
+
+# In these cases:
+# allowed = true  
+# clarification_question = ONE tailored question based on the user’s exact wording.
+
+# ================================================
+# INPUT QUALITY CHECK (VERY IMPORTANT)
+# ================================================
+# Classify input as:
+# - VAGUE if topic or intent is unclear  
+# - OK if topic is clear and actionable  
+
+# VAGUE includes (you MUST ask a question if any of these appear):
+# - Inputs like "Write something on X"
+# - "Post about X"
+# - "Explain X"
+# - One-word topics like "AI", "Cloud", "ML", "Blockchain"
+# - Broad topics with no angle, audience, or purpose
+# - Ambiguous intent
+# - Broad negative opinions like “X is bad”
+
+# If VAGUE:
+# - Provide exactly ONE clarification question  
+# - clarification_question must be non-null  
+# - The question must be tailored to the user's exact wording, not a generic template.  
+
+# OK means:
+# - Clear topic  
+# - Clear intent  
+# - Enough context to proceed  
+ 
+# ** If the user has already answered your question in previous turns,
+# DO NOT repeat it. Ask a different question or proceed.
+
+# ================================================
+# FACT CHECK DECISION
+# ================================================
+# Decide whether this needs external fact checking:
+# - If it involves claims about real-world data, dates, statistics, events, or news → fact_check_required = true  
+# - If it is purely personal opinion or experience → fact_check_required = false  
+
+# If fact_check_required = true:
+# - Generate exactly 3 search queries in "search_queries"
+
+# ================================================
+# VERY IMPORTANT OUTPUT RULES
+# ================================================
+# - NEVER explain reasoning  
+# - NEVER output text outside JSON  
+# - Be strict  
+# - Return ONLY valid JSON  
+
+# Return in this format:
+# {format_instructions}
+# """),
+# ("user", "{user_query}")
+# ])
+
+
+
+# gate_keeper_parser = JsonOutputParser()
+
+# def run_gate_keeper(user_query, n, conversation_context=None):
+#     prompt = gate_keeper_prompt.partial(format_instructions=gate_keeper_parser.get_format_instructions())
+
+#     if conversation_context:
+#         user_query = f"""
+#         Previous Q&A context: {conversation_context}
+
+#         Latest user input: {user_query}
+#         """
+
+#     chain = prompt | gate_keeper | gate_keeper_parser
+#     try:
+#         return chain.invoke({"user_query": user_query})
+#     except Exception as e:
+#         return {
+#         "allowed": False,
+#         "message": 
+#             "I can’t process this as a LinkedIn post because it looks like a question or unclear input. "
+#             "Please rephrase as a clear topic you want to post about.",
+#         "suggestion": [
+#             "The impact of AI on jobs",
+#             "Lessons from my first internship",
+#             "Why Python matters in data science"
+#         ],
+#         "clarification_question": None,
+#         "fact_check_required": False,
+#         "search_queries": None,
+#         "user_intent": "rewrite_as_linkedin_post",
+#         "gate_keeper_understanding": None
+#     }
+
+
+
+
+# fact_checker_prompt = ChatPromptTemplate.from_messages([
+# ("system", """
+# You are a strict fact verifier using Tavily results.
+
+# You must decide if the claim is true or false based ONLY on web_results.
+
+# Return your answer in this EXACT text format (not JSON):
+
+# VERDICT: true or false
+
+# VERIFIED FACTS:
+# - fact 1
+# - fact 2
+
+# CORRECTION (if false):
+# <explain clearly why claim is wrong OR write 'None'>
+
+# EVIDENCE URLS:
+# - url1
+# - url2
+# """),
+# ("user", "User Query: {user_query}\nWeb Results: {web_results}")
+# ])
+
+# def run_fact_checker(user_query, web_results):
+#     chain = fact_checker_prompt | fact_checker
+
+#     raw_text = chain.invoke({
+#         "user_query": user_query,
+#         "web_results": web_results
+#     })
+
+#     text = raw_text.content  # <-- IMPORTANT FIX
+
+#     # -------- SAFE PARSING IN PYTHON (NO JSON PARSER) --------
+
+#     is_true = "VERDICT: true" in text.lower()
+
+#     urls = []
+#     for line in text.split("\n"):
+#         if line.strip().startswith("http"):
+#             urls.append(line.strip())
+
+#     return {
+#         "is_true": is_true,
+#         "verified_facts": [],
+#         "correction_if_any": text,
+#         "evidence_urls": urls
+#     }
+
+# # ==========================
+# # post_generator — LinkedIn Post
+# # ==========================
+
+# # ==========================
+# # post_generator — LinkedIn Post (FIXED VERSION)
+# # ==========================
+# # ==========================
+# # post_generator — LinkedIn Post (WORKING VERSION)
+# # ==========================
+# # ==========================
+# # post_generator — LinkedIn Post (PARSER-SAFE VERSION)
+# # ==========================
+
+# # ==========================================================
+# # post_generator — LINKEDIN POST + CONDITIONAL REFERENCES (PRODUCTION SAFE)
+# # ==========================================================
+
+# post_generator_prompt = ChatPromptTemplate.from_messages([
+# (
+# "system",
+# """
+# You are a professional LinkedIn content creator.Your job is to:
+# 1)generate a polished LinkedIn post  
+# 2) Decide whether external references would add value  
+
+#  YOU MUST NOT WRITE ANY TEXT BEFORE OR AFTER JSON.
+#  DO NOT add explanations, headings, or prose.
+#  DO NOT preface your answer with a story.
+#  DO NOT summarize outside JSON.
+#  DO NOT add markdown like ```json.
+
+# Your ENTIRE response must be a SINGLE JSON OBJECT and nothing else.
+
+# ================================================
+# MANDATORY STRUCTURE OF THE POST
+# ================================================
+
+# 1) HOOK — a strong first line bold + attention grabbing  
+# 2) BODY — 2–3 short paragraphs + exactly 3 bullet points  
+# 3) CTA — YOU MUST END WITH A DIRECT QUESTION (?)  
+# 4) Use 2–3 emojis TOTAL (not more)  
+# 5) Add 6–8 relevant hashtags only  
+
+# ================================================
+# CONTENT RULES
+# ================================================
+
+# If source == "gate_keeper":
+#   - Convert user experience into: Challenge → Change → Outcome  
+
+# If source == "tavily":
+#   - Base the post on verified facts and politely correct inaccuracies if needed  
+
+  
+# CONTENT RULES (CRITICAL — LET THE LLM DECIDE)
+
+# If user_intent == "post_original_text":
+#   - DO NOT rewrite or paraphrase the user's text  
+#   - Keep the original wording as much as possible  
+#   - Only format it for LinkedIn (spacing, light emojis, hashtags, CTA)  
+#   - A strong hook should be given which must be attention grabbing
+
+# If user_intent == "rewrite_as_linkedin_post":
+#   - Transform the idea into a professional LinkedIn post  
+#   - Follow Challenge → Change → Outcome style  
+
+    
+# DECISION RULE (VERY IMPORTANT):
+# After writing the post, decide:
+
+# - needs_references = true IF:
+#   - Topic involves careers, learning, research, policy, industry trends, or future planning  
+#   - OR the reader would benefit from trusted sources  
+
+# - needs_references = false IF:
+#   - Pure personal story, poem, or reflection  
+#   - Creative writing  
+#   - Simple opinion  
+  
+
+# If needs_references = true, also provide:
+# reference_topic = a short topic Tavily can search, e.g.
+#   - "AI careers for graduates"
+#   - "AI workplace productivity"
+#   - "AI job market trends"
+
+
+# ================================================
+# DECISION RULE FOR REFERENCES (CRITICAL)
+# ================================================
+
+# You must decide whether external references are needed.
+
+# Set:
+#   "need_references": true ONLY IF:
+#    - The post contains real-world facts, statistics, trends, dates, or claims
+#    - OR the topic is educational, technical, or controversial
+#    - OR the user intent suggests learning, research, or evidence
+
+# Set:
+#   "need_references": false IF:
+#    - It is purely personal opinion
+#    - It is motivational / reflective / storytelling
+#    - It is emotional or subjective
+#    - It is generic leadership or inspiration
+
+# If need_references = true:
+#   - Generate exactly 3 high-quality Tavily search queries in:
+#       "reference_queries"
+
+# If need_references = false:
+#   - Set "reference_queries": []
+
+# ================================================
+# OPTIONAL RECOMMENDATIONS
+# ================================================
+
+# You may add 1–3 helpful recommendations ONLY if they add real value.
+# Otherwise set:
+#   "recommendations": []
+
+# ================================================
+# FINAL REQUIRED JSON FORMAT (YOU MUST FOLLOW)
+# ================================================
+
+# {{
+#   "formatted_post": "Final LinkedIn post with HOOK, BODY, CTA question, emojis, and hashtags",
+#   "need_references": true/false,
+#   "reference_queries": [
+#       "query 1"
+#   ],
+#   "recommendations": [
+#       "Optional suggestion 1",
+#       "Optional suggestion 2"
+#   ]
+# }}
+# """
+# ),
+# (
+# "user",
+# """
+# Final Query: {final_query}
+# Source: {source}
+# Tavily Context: {tavily_context}
+# Verified Facts: {verified_facts}
+# gate_keeper Understanding: {gate_keeper_understanding}
+# User Intent: {user_intent}
+# """
+# )
+# ])
+
+# post_generator_parser = JsonOutputParser()
+
+# def run_post_generator(
+#     final_query,
+#     source,
+#     tavily_context=None,
+#     verified_facts=None,
+#     gate_keeper_understanding=None,
+#     user_intent=None      # ✅ <-- comma added
+# ):
+
+#     chain = post_generator_prompt | post_generator | post_generator_parser
+
+#     return chain.invoke({
+#         "final_query": final_query,
+#         "source": source,
+#         "tavily_context": tavily_context,
+#         "verified_facts": verified_facts,
+#         "gate_keeper_understanding": gate_keeper_understanding,
+#         "user_intent": user_intent          # ✅ <-- now actually passed to LLM
+#     })
+
+
+
+# from langchain_groq import ChatGroq
+from langchain_openai import AzureChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 from config import *
 
-llm1 = ChatGroq(api_key=GROQ_API_KEY, model=LLM1_MODEL, temperature=0)
-llm2 = ChatGroq(api_key=GROQ_API_KEY, model=LLM2_MODEL, temperature=0)
-llm3 = ChatGroq(api_key=GROQ_API_KEY, model=LLM3_MODEL, temperature=0.7)
+gate_keeper = AzureChatOpenAI(api_key=AZURE_OPENAI_API_KEY,azure_endpoint=AZURE_OPENAI_ENDPOINT,api_version=AZURE_OPENAI_API_VERSION, deployment_name=AZURE_OPENAI_DEPLOYMENT,temperature=0)
 
-# ==========================
-# LLM1 — Safety + Fact Check
-# ==========================
+fact_checker= AzureChatOpenAI(api_key=AZURE_OPENAI_API_KEY,azure_endpoint=AZURE_OPENAI_ENDPOINT,api_version=AZURE_OPENAI_API_VERSION, deployment_name=AZURE_OPENAI_DEPLOYMENT,temperature=0)
 
-# ==========================
-# LLM1 — SAFETY + QUALITY + FACT CHECK DECIDER
-# ==========================
-llm1_prompt = ChatPromptTemplate.from_messages([
+post_generator = AzureChatOpenAI(api_key=AZURE_OPENAI_API_KEY,azure_endpoint=AZURE_OPENAI_ENDPOINT,api_version=AZURE_OPENAI_API_VERSION, deployment_name=AZURE_OPENAI_DEPLOYMENT,temperature=0.7)
+
+
+gate_keeper_prompt = ChatPromptTemplate.from_messages([
 ("system", """
-You are a **content safety gate + input quality evaluator + fact-check decider** 
-for a LinkedIn post generation system.
 
-You will receive a user query that the user wants to turn into a LinkedIn post.
+ ROLE-
+ You are a **content safety gate** for a LinkedIn post generation system. You are going to get the content from the user to be posted on linked In. Your role is to go through that content decide whether to post it on linked in or not, with some editing. You are also a input quality evaluator and fact-check decider. You must carefully analyze the user query and decide whether it contains ANY of the following, you must not invent restrictions:
 
-================================================
-STRICTLY DISALLOWED (BLOCK IMMEDIATELY)
-================================================
-Block content that contains any of the following:
-- Pornographic or explicit sexual content  
-- Sexual content involving minors (zero tolerance)  
-- Instructions, encouragement, or guidance for illegal or illicit activities  
-- Extreme violence or criminal acts  
-- Hate speech or abuse targeting protected groups (religion, caste, race, gender, etc.)  
-- Any kind of questions that expect an answer (you are a content writer, not a chatbot or teacher)
+STRICTLY DISALLOWED- (HARD BLOCK)
+
+You must immediately block any input that contains pornographic or explicit sexual content, sexual content involving minors or women or a particular group of people(zero tolerance), instructions or encouragement for illegal activities, extreme violence or criminal acts, or hate speech targeting protected groups such as religion, caste, race, or gender. Additionally, if the user input is phrased as a direct question or appears to seek an answer, you must not respond to it as a chatbot or teacher. Instead, you must politely reject such inputs on the grounds that your role is to generate LinkedIn posts, not to answer questions or provide explanations.
+
+
+GENERAL CONTENT RULES-
  
-STRICTLY DISALLOWED — QUESTION HANDLING (CRITICAL FIX)
-If the user input is phrased as a DIRECT QUESTION (starts with:
-"why", "how", "what", "is", "can", "should", "when", "where", "does", "do"),
-
-you MUST NOT try to answer it as a post.
-
-Instead, you MUST:
-allowed = false  
-clarification_question = null  
-message = polite rejection like:
-
-"I can’t answer questions directly because I generate LinkedIn posts, not explanations.  
-If you want a post on this topic, please rephrase as a statement instead."
-
-You MUST also provide 2–3 safer LinkedIn topic suggestions.
-
-================================================
-IMPORTANT RULES (MERGED & CLEANED)
-================================================
-- Do NOT block content just because it is negative, critical, sarcastic, or emotional  
-- Do NOT block opinions, rants, movie criticism, workplace frustration, or dissatisfaction  
-- Do NOT block casual or harsh wording unless it is explicitly sexual, illegal, or hateful  
-- Criticism of movies, actors, companies, or ideas is ALWAYS allowed  
-- The user is allowed to express dislike, boredom, frustration, or disappointment  
-
+Do NOT block content just because it is negative, critical, sarcastic, or emotional. Do NOT block opinions, rants, movie criticism, workplace frustration, or dissatisfaction. Do NOT block casual or harsh wording unless it is explicitly sexual, illegal, or hateful. Criticism of movies, actors, companies, or ideas is ALWAYS allowed. The user is allowed to express dislike, boredom, frustration, or disappointment  
 If the user input is unclear or insufficient, you MUST ask exactly ONE clarification question.
-
 Before blocking anything, you must consider:
 Could this be rewritten so that it becomes informational, educational, or authentic?
 If yes → you must suggest safer rewrites instead of blocking.
 
-================================================
-DECISION LOGIC (YOU MUST FOLLOW THIS)
-================================================
+
+DECISION LOGIC- (MANDATORY FLOW)
+
 If content clearly violates STRICTLY DISALLOWED and CANNOT be rewritten:
-- allowed = false  
-- message = polite, neutral warning asking the user to change the topic  
-- suggestion = null  
+ allowed = false  
+ message = polite, neutral warning asking the user to change the topic  
+ suggestion = null  
 
 If content violates STRICTLY DISALLOWED but CAN be rewritten safely:
-- allowed = true  
-- message = polite, neutral warning asking the user to adjust the topic  
-- suggestion = list of suggested rewrites  
+  allowed = true  
+  message = polite, neutral warning asking the user to adjust the topic  
+  suggestion = list of suggested rewrites  
 
 If content is safe:
-- allowed = true  
-- message = null  
-- suggestion = null  
+ allowed = true  
+ message = null  
+ suggestion = null  
+You must NOT invent restrictions. You must NOT act as a sentiment judge.You must NOT block safe, opinionated, or critical content.
 
-You must NOT invent restrictions.  
-You must NOT act as a sentiment judge.  
-You must NOT block safe, opinionated, or critical content.
+USER INTENT CLASSIFICATION-  
 
-
-================================================
-USER INTENT CLASSIFICATION (NEW — VERY IMPORTANT)
-================================================
 You MUST classify the user's intent into exactly ONE of these categories:
 
 1) post_original_text  
-   - If the user provides a poem, quote, story, lyrics, or personal writing  
-   - AND says they want to "post this", "share this", or "publish this"
+    If the user provides a poem, quote, story, lyrics, or personal writing, AND says they want to "post this", "share this", or "publish this"
 
 2) rewrite_as_linkedin_post  
-   - If the user gives an idea, opinion, experience, or topic  
-   - AND wants you to transform it into a professional LinkedIn post  
-
-3) explain_or_discuss  
-   - If the user is asking a question, requesting explanation, or discussion  
+    If the user gives an idea, opinion, experience, or topic ,AND wants you to transform it into a professional LinkedIn post  
 
 You MUST return this in a new field:
-"user_intent": "post_original_text" OR "rewrite_as_linkedin_post" OR "explain_or_discuss"
+"user_intent": "post_original_text" OR "rewrite_as_linkedin_post" 
 
- 
-
-================================================
-NEW RULE — NONSENSE vs VAGUE (GENERALIZED)
-================================================
+NONSENSE vs VAGUE CLASSIFICATION-
 
 You must classify the input into **three categories**:
 
-1️NONSENSE (reject, do NOT ask a question)
-Examples of patterns (not hardcoded cases):
-- Only numbers  
-- Random characters  
-- Broken sentence fragments  
-- Less than 3 meaningful words with no topic  
-- Inputs that cannot logically form a LinkedIn post  
+1) NONSENSE (reject, do NOT ask a question)
+Examples of patterns (not hardcoded cases): Only numbers, Random characters, Broken sentence fragments, Less than 3 meaningful words with no topic, Inputs that cannot logically form a LinkedIn post  
 
 If NONSENSE:
 allowed = false  
 clarification_question = null  
 message = polite rejection asking for a meaningful topic  
-suggestion = 2–3 reasonable LinkedIn topic ideas **generated BY YOU based on the user’s domain**  
+suggestion = 2-3 reasonable LinkedIn topic ideas **generated BY YOU based on the user’s domain**  
 
-================================================
- NEW RULE — FIX FOR YOUR BUG 
-================================================
+
+VAGUE OPINION HANDLING- 
+
 Even if the input is an opinion, you MUST still ask a clarification question when:
-
-- The statement is broad, emotional, or judgmental (e.g., "X is bad", "X is terrible")
-- The statement does NOT specify:
+The statement is broad, emotional, or judgmental (e.g., "X is bad", "X is terrible")
+The statement does NOT specify:
   • audience  
   • angle  
   • context  
   • purpose  
 
-Examples you must treat as VAGUE:
+Consider these Examples you must treat as VAGUE:
 - "AI is bad"
 - "Cloud is useless"
 - "GenAI is dangerous"
@@ -150,12 +563,11 @@ In these cases:
 allowed = true  
 clarification_question = ONE tailored question based on the user’s exact wording.
 
-================================================
-INPUT QUALITY CHECK (VERY IMPORTANT)
-================================================
+INPUT QUALITY CHECK- (MANDATORY)
+
 Classify input as:
-- VAGUE if topic or intent is unclear  
-- OK if topic is clear and actionable  
+VAGUE if topic or intent is unclear  
+OK if topic is clear and actionable  
 
 VAGUE includes (you MUST ask a question if any of these appear):
 - Inputs like "Write something on X"
@@ -167,35 +579,26 @@ VAGUE includes (you MUST ask a question if any of these appear):
 - Broad negative opinions like “X is bad”
 
 If VAGUE:
-- Provide exactly ONE clarification question  
-- clarification_question must be non-null  
-- The question must be tailored to the user's exact wording, not a generic template.  
+ Provide exactly ONE clarification question. clarification_question must be non-null .The question must be tailored to the user's exact wording, not a generic template.  
 
-OK means:
-- Clear topic  
-- Clear intent  
-- Enough context to proceed  
- 
-** If the user has already answered your question in previous turns,
-DO NOT repeat it. Ask a different question or proceed.
+OK means: 
+ Clear topic, Clear intent, Enough context to proceed  
 
-================================================
-FACT CHECK DECISION
-================================================
+**If the user has already answered your question in previous turns,
+DO NOT repeat it. Ask a different question or proceed.**
+
+
+ FACT CHECK DECISION-
+
 Decide whether this needs external fact checking:
 - If it involves claims about real-world data, dates, statistics, events, or news → fact_check_required = true  
 - If it is purely personal opinion or experience → fact_check_required = false  
 
 If fact_check_required = true:
-- Generate exactly 3 search queries in "search_queries"
+- Generate exactly 3 search queries in "search_queries" and send it as input to Tavily Webserach
 
-================================================
-VERY IMPORTANT OUTPUT RULES
-================================================
-- NEVER explain reasoning  
-- NEVER output text outside JSON  
-- Be strict  
-- Return ONLY valid JSON  
+ OUTPUT FORMAT RULES (STRICT)
+ NEVER explain reasoning. NEVER output text outside JSON. Be strict. Return ONLY valid JSON  
 
 Return in this format:
 {format_instructions}
@@ -204,11 +607,10 @@ Return in this format:
 ])
 
 
+gate_keeper_parser = JsonOutputParser()
 
-llm1_parser = JsonOutputParser()
-
-def run_llm1(user_query, n, conversation_context=None):
-    prompt = llm1_prompt.partial(format_instructions=llm1_parser.get_format_instructions())
+def run_gate_keeper(user_query, n, conversation_context=None):
+    prompt = gate_keeper_prompt.partial(format_instructions=gate_keeper_parser.get_format_instructions())
 
     if conversation_context:
         user_query = f"""
@@ -217,15 +619,15 @@ def run_llm1(user_query, n, conversation_context=None):
         Latest user input: {user_query}
         """
 
-    chain = prompt | llm1 | llm1_parser
+    chain = prompt | gate_keeper | gate_keeper_parser
     try:
         return chain.invoke({"user_query": user_query})
     except Exception as e:
         return {
         "allowed": False,
         "message": 
-            "I can’t process this as a LinkedIn post because it looks like a question or unclear input. "
-            "Please rephrase as a clear topic you want to post about.",
+            "Your input could not be processed due to a system error. "
+            "Please try again with a clearer LinkedIn topic.",
         "suggestion": [
             "The impact of AI on jobs",
             "Lessons from my first internship",
@@ -235,48 +637,44 @@ def run_llm1(user_query, n, conversation_context=None):
         "fact_check_required": False,
         "search_queries": None,
         "user_intent": "rewrite_as_linkedin_post",
-        "llm1_understanding": None
+        "gate_keeper_understanding": None
     }
 
+fact_checker_prompt = ChatPromptTemplate.from_messages([
 
-
-
-llm2_prompt = ChatPromptTemplate.from_messages([
 ("system", """
-You are a strict fact verifier using Tavily results.
+You are a strict fact verifier who must rely only on Tavily web results.
 
-You must decide if the claim is true or false based ONLY on web_results.
-
-Return your answer in this EXACT text format (not JSON):
+Your responsibility is to determine whether the user's claim is true or false based **only** on the provided web_results. You must not use prior knowledge, assumptions, or external reasoning beyond what is present in the search results.
+You must return your answer in this **exact plain-text format (not JSON):**
 
 VERDICT: true or false
 
 VERIFIED FACTS:
-- fact 1
-- fact 2
+- fact 1  
+- fact 2  
 
 CORRECTION (if false):
-<explain clearly why claim is wrong OR write 'None'>
+<clearly explain why the claim is wrong OR write 'None'>
 
 EVIDENCE URLS:
-- url1
-- url2
+- url1  
+- url2  
 """),
+
 ("user", "User Query: {user_query}\nWeb Results: {web_results}")
+
 ])
 
-def run_llm2(user_query, web_results):
-    chain = llm2_prompt | llm2
+def run_fact_checker(user_query, web_results):
+    chain = fact_checker_prompt | fact_checker
 
     raw_text = chain.invoke({
         "user_query": user_query,
         "web_results": web_results
     })
 
-    text = raw_text.content  # <-- IMPORTANT FIX
-
-    # -------- SAFE PARSING IN PYTHON (NO JSON PARSER) --------
-
+    text = raw_text.content  
     is_true = "VERDICT: true" in text.lower()
 
     urls = []
@@ -291,145 +689,129 @@ def run_llm2(user_query, web_results):
         "evidence_urls": urls
     }
 
-# ==========================
-# LLM3 — LinkedIn Post
-# ==========================
+post_generator_prompt = ChatPromptTemplate.from_messages([
 
-# ==========================
-# LLM3 — LinkedIn Post (FIXED VERSION)
-# ==========================
-# ==========================
-# LLM3 — LinkedIn Post (WORKING VERSION)
-# ==========================
-# ==========================
-# LLM3 — LinkedIn Post (PARSER-SAFE VERSION)
-# ==========================
-
-# ==========================================================
-# LLM3 — LINKEDIN POST + CONDITIONAL REFERENCES (PRODUCTION SAFE)
-# ==========================================================
-
-llm3_prompt = ChatPromptTemplate.from_messages([
 (
 "system",
 """
-You are a professional LinkedIn content creator.Your job is to:
-1)generate a polished LinkedIn post  
-2) Decide whether external references would add value  
+You are a professional LinkedIn content creator. Your job is to: Generate a polished LinkedIn post and Decide whether external references would add value  
 
- YOU MUST NOT WRITE ANY TEXT BEFORE OR AFTER JSON.
- DO NOT add explanations, headings, or prose.
- DO NOT preface your answer with a story.
- DO NOT summarize outside JSON.
- DO NOT add markdown like ```json.
+YOU MUST NOT WRITE ANY TEXT BEFORE OR AFTER JSON. DO NOT add explanations, headings, or prose.DO NOT preface your answer with a story. DO NOT summarize outside JSON.DO NOT add markdown like ```json.  
+Your ENTIRE response must be a SINGLE JSON OBJECT and nothing else.  
 
-Your ENTIRE response must be a SINGLE JSON OBJECT and nothing else.
-
-================================================
-MANDATORY STRUCTURE OF THE POST
-================================================
-
+MANDATORY STRUCTURE OF THE POST-
 1) HOOK — a strong first line bold + attention grabbing  
-2) BODY — 2–3 short paragraphs + exactly 3 bullet points  
-3) CTA — YOU MUST END WITH A DIRECT QUESTION (?)  
-4) Use 2–3 emojis TOTAL (not more)  
-5) Add 6–8 relevant hashtags only  
+2) BODY — 2-3 short paragraphs with exactly 3 bullet points if required 
+3) CTA — The CTA must be a clear, engaging, and actionable question that invites discussion from LinkedIn readers.
+4) Use 2-3 emojis TOTAL (not more)  
+5) Add 6-8 relevant hashtags only  
 
-================================================
-CONTENT RULES
-================================================
 
-If source == "llm1":
-  - Convert user experience into: Challenge → Change → Outcome  
+CONTENT RULES:-
 
-If source == "tavily":
-  - Base the post on verified facts and politely correct inaccuracies if needed  
+If source == "gate_keeper": Convert user experience into: Challenge → Change → Outcome  
+If source == "tavily": Base the post on verified facts and politely correct inaccuracies if needed  
 
-  
-CONTENT RULES (CRITICAL — LET THE LLM DECIDE)
-
+CONTENT RULES THE LLM SHOULD DECIDE:-
 If user_intent == "post_original_text":
-  - DO NOT rewrite or paraphrase the user's text  
-  - Keep the original wording as much as possible  
-  - Only format it for LinkedIn (spacing, light emojis, hashtags, CTA)  
-  - A strong hook should be given which must be attention grabbing
+- DO NOT rewrite or paraphrase the user's text  
+- Keep the original wording as much as possible  
+- Only format it for LinkedIn (spacing, light emojis, hashtags, CTA)  
+- Provide a strong, attention-grabbing hook  
 
 If user_intent == "rewrite_as_linkedin_post":
-  - Transform the idea into a professional LinkedIn post  
-  - Follow Challenge → Change → Outcome style  
-
-    
-DECISION RULE (VERY IMPORTANT):
-After writing the post, decide:
-
-- needs_references = true IF:
-  - Topic involves careers, learning, research, policy, industry trends, or future planning  
-  - OR the reader would benefit from trusted sources  
-
-- needs_references = false IF:
-  - Pure personal story, poem, or reflection  
-  - Creative writing  
-  - Simple opinion  
-  
-
-If needs_references = true, also provide:
-reference_topic = a short topic Tavily can search, e.g.
-  - "AI careers for graduates"
-  - "AI workplace productivity"
-  - "AI job market trends"
+- Transform the idea into a professional LinkedIn post  
+- Follow Challenge → Change → Outcome style  
 
 
-================================================
-DECISION RULE FOR REFERENCES (CRITICAL)
-================================================
-
+DECISION RULE FOR REFERENCES (CRITICAL):---
 You must decide whether external references are needed.
+Set:
+"need_references": true ONLY IF:
+ The post contains real-world facts, statistics, trends, dates, or claims. OR the topic is educational, technical, or controversial. OR the user intent suggests learning, research, or evidence  
 
 Set:
-  "need_references": true ONLY IF:
-   - The post contains real-world facts, statistics, trends, dates, or claims
-   - OR the topic is educational, technical, or controversial
-   - OR the user intent suggests learning, research, or evidence
+"need_references": false IF:
+ It is purely personal opinion. It is motivational / reflective / storytelling. It is emotional or subjective. It is generic leadership or inspiration  
 
-Set:
-  "need_references": false IF:
-   - It is purely personal opinion
-   - It is motivational / reflective / storytelling
-   - It is emotional or subjective
-   - It is generic leadership or inspiration
+If need_references = true: Generate exactly 1 high-quality Tavily search queries in "reference_queries"  
+If need_references = false: Set "reference_queries": []  
 
-If need_references = true:
-  - Generate exactly 3 high-quality Tavily search queries in:
-      "reference_queries"
+SCHEMA-BASED OUTPUT DECISION :--
 
-If need_references = false:
-  - Set "reference_queries": []
+After generating the post, you MUST choose ONLY ONE primary output type:
 
-================================================
+OPTION A — REFERENCES (EVIDENCE-BASED POSTS)
+Use this when the post is factual, technical, career-related, policy-related, trend-based, or research-oriented.
+
+If you choose this option, you MUST set:
+"show_references": true  
+"show_recommendations": false  
+"show_suggestions": false  
+
+And generate exactly 1 Tavily search queries in:
+"reference_queries"
+
+------------------------------------------------
+OPTION B — RECOMMENDATIONS (ACTIONABLE POSTS)
+Use this when the post is about careers, learning, growth, skills, or self-improvement.
+
+If you choose this option, you MUST set:
+"show_references": false  
+"show_recommendations": true  
+"show_suggestions": false  
+
+And provide 1-3 actionable recommendations in:
+"recommendations"
+
+------------------------------------------------
+OPTION C — SUGGESTIONS (TOPIC REFINEMENT)
+Use this when:
+The user topic was vague.The post is generic. The post could benefit from alternate angles  
+And provide 2-3 alternative LinkedIn topic ideas in:
+"suggestions"
+
+If you choose this option, you MUST set:
+"show_references": false  
+"show_recommendations": false  
+"show_suggestions": true  
+
+
+YOU MUST PICK ONLY ONE OPTION:--
 OPTIONAL RECOMMENDATIONS
-================================================
 
-You may add 1–3 helpful recommendations ONLY if they add real value.
+You may add 1-3 helpful recommendations ONLY if they add real value.  
 Otherwise set:
-  "recommendations": []
+"recommendations": []  
 
-================================================
-FINAL REQUIRED JSON FORMAT (YOU MUST FOLLOW)
-================================================
+FINAL REQUIRED JSON FORMAT -
 
 {{
   "formatted_post": "Final LinkedIn post with HOOK, BODY, CTA question, emojis, and hashtags",
   "need_references": true/false,
+  "show_references": true/false,
+  "show_recommendations": true/false,
+  "show_suggestions": true/false,
+
   "reference_queries": [
-      "query 1"
+      "query 1",
+      "query 2",
+      "query 3"
   ],
+
   "recommendations": [
-      "Optional suggestion 1",
-      "Optional suggestion 2"
+      "Optional recommendation 1",
+      "Optional recommendation 2"
+  ],
+
+  "suggestions": [
+      "Alternative topic 1",
+      "Alternative topic 2"
   ]
 }}
 """
 ),
+
 (
 "user",
 """
@@ -437,30 +819,33 @@ Final Query: {final_query}
 Source: {source}
 Tavily Context: {tavily_context}
 Verified Facts: {verified_facts}
-LLM1 Understanding: {llm1_understanding}
+gate_keeper Understanding: {gate_keeper_understanding}
 User Intent: {user_intent}
 """
 )
+
 ])
+post_generator_parser = JsonOutputParser()
 
-llm3_parser = JsonOutputParser()
-
-def run_llm3(
+def run_post_generator(
     final_query,
     source,
     tavily_context=None,
     verified_facts=None,
-    llm1_understanding=None,
-    user_intent=None      # ✅ <-- comma added
+    gate_keeper_understanding=None,
+    user_intent=None
 ):
 
-    chain = llm3_prompt | llm3 | llm3_parser
+    chain = post_generator_prompt | post_generator | post_generator_parser
 
     return chain.invoke({
         "final_query": final_query,
         "source": source,
         "tavily_context": tavily_context,
         "verified_facts": verified_facts,
-        "llm1_understanding": llm1_understanding,
-        "user_intent": user_intent          # ✅ <-- now actually passed to LLM
+        "gate_keeper_understanding": gate_keeper_understanding,
+        "user_intent": user_intent
     })
+
+
+
