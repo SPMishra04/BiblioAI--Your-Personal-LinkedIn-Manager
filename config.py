@@ -1,28 +1,10 @@
-import os
-from dotenv import load_dotenv
 
-# Load .env file
-load_dotenv()
+# Clarification loop
+MAX_CLARIFICATION_TURNS = 3
 
+# Number of Tavily search queries to generate
+NUM_SEARCH_QUERIES = 4
 
-AZURE_OPENAI_API_KEY = os.getenv("AZURE_OPENAI_API_KEY")
-AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
-AZURE_OPENAI_API_VERSION = os.getenv("AZURE_OPENAI_API_VERSION")
-AZURE_OPENAI_DEPLOYMENT = os.getenv("AZURE_OPENAI_DEPLOYMENT")
-
-# ----------- CONTROL PARAMETERS -----------
-MAX_CLARIFICATION_TURNS = int(os.getenv("MAX_CLARIFICATION_TURNS", 3))
-NUM_SEARCH_QUERIES = int(os.getenv("NUM_SEARCH_QUERIES", 3))
-
-# ----------- API KEYS -----------
-# GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
-
-# # ----------- MODEL NAMES -----------
-# gate_keeper_MODEL = os.getenv("LLM_MODEL", "llama-3.1-8b-instant")
-# fact_checker_MODEL= os.getenv("LLM_MODEL", "llama-3.1-8b-instant")
-# post_generator_MODEL= os.getenv("LLM_MODEL", "llama-3.1-8b-instant")
-
-# # ----------- CONTROL PARAMETERS -----------
-# MAX_CLARIFICATION_TURNS = int(os.getenv("MAX_CLARIFICATION_TURNS", 3))
-# NUM_SEARCH_QUERIES = int(os.getenv("NUM_SEARCH_QUERIES", 3))
+# Max links to display per topic
+MAX_LINKS_PER_TOPIC_FACTCHECK = 6
+MAX_LINKS_PER_TOPIC_NORMAL = 3

@@ -1,92 +1,8 @@
-# from tavily import TavilyClient
-# from config import TAVILY_API_KEY
-
-# from tavily import TavilyClient
-# from config import TAVILY_API_KEY
-
-
-# class SearchService:
-#     def __init__(self):
-#         self.client = TavilyClient(api_key=TAVILY_API_KEY)
-
-#     def search(self, query: str):
-#         try:
-#             response = self.client.search(
-#                 query=query,
-#                 max_results=5,
-#                 search_depth="advanced",
-#                 include_raw_content=False
-#             )
-
-#             results = []
-#             for result in response.get("results", []):
-#                 results.append({
-#                     "title": result.get("title", ""),
-#                     "url": result.get("url", ""),
-#                     "content": result.get("content", ""),
-#                     "score": result.get("score", 0.0)
-#                 })
-
-#             return results
-
-#         except Exception as e:
-#             print(f"  ⚠️ Search failed for '{query}': {str(e)}")
-#             return []
-
-
-# # Create shared client
-# search_service = SearchService()
-
-
-# def tavily_search(search_queries):
-#     if not search_queries:
-#         return []      # <-- prevents crashes
-
-#     all_results = []
-
-
-#     for q in search_queries:
-#         results = search_service.search(q)
-
-#         all_results.append({
-#             "query": q,
-#             "results": results
-#         })
-
-#     return all_results
-
-
-# def compress_tavily_results(web_results, max_chars=4000):
-#     """
-#     Trim Tavily results to avoid token overflow.
-#     Keeps only short snippets + URLs.
-#     """
-#     compressed = []
-
-#     for item in web_results:
-#         snippets = []
-
-#         for r in item["results"]:
-#             text = (r.get("content") or "")[:800]  # safe slice
-#             url = r.get("url")
-
-#             snippets.append({
-#                 "snippet": text,
-#                 "url": url
-#             })
-
-#         compressed.append({
-#             "query": item["query"],
-#             "snippets": snippets
-#         })
-
-#     return compressed
-
-
-
-
+import os
 from tavily import TavilyClient
-from config import TAVILY_API_KEY
+from dotenv import load_dotenv
+load_dotenv()
+
 
 # ==========================================================
 # ENHANCED TAVILY SEARCH SERVICE (REFERENCE + CONTEXT READY)
@@ -101,16 +17,18 @@ class SearchService:
     """
 
     def __init__(self):
-        self.client = TavilyClient(api_key=TAVILY_API_KEY)
+        self.client = TavilyClient(api_key=os.getenv("TAVILY_API_KEY"))
 
     def search(self, query: str):
         try:
             response = self.client.search(
                 query=query,
-                max_results=5,
+                max_results=2,              
                 search_depth="advanced",
-                include_raw_content=True   # <-- IMPORTANT (for LLM recs later)
+                include_raw_content=True   
             )
+            # max_results means it Limits the number of search results returned per queryMeaning:
+            #max_results=1 → only top 1 result, max_results=5 → top 5 results
 
             results = []
             for result in response.get("results", []):
@@ -118,14 +36,14 @@ class SearchService:
                     "title": result.get("title", ""),
                     "url": result.get("url", ""),
                     "content": result.get("content", ""),
-                    "raw_content": result.get("raw_content", ""),  # NEW FIELD
+                    "raw_content": result.get("raw_content", ""), 
                     "score": result.get("score", 0.0)
                 })
 
             return results
 
         except Exception as e:
-            print(f"  ⚠️ Search failed for '{query}': {str(e)}")
+            print(f"  Search failed for '{query}': {str(e)}")
             return []
 
 
@@ -170,25 +88,20 @@ def compress_tavily_results(web_results, max_chars=2000):
 
     compressed = []
 
+
     for item in web_results:
         snippets = []
-        combined_text = ""
 
         for r in item["results"]:
-            text = (r.get("content") or "")[:800]      # short snippet
-            raw = (r.get("raw_content") or "")[:1200] # richer context
-
-            combined_text += raw + "\n\n"
-
             snippets.append({
-                "snippet": text,
+                "title": r.get("title", "Untitled Source"),
+                "snippet": (r.get("content") or "")[:800],
                 "url": r.get("url")
             })
 
         compressed.append({
             "query": item["query"],
-            "snippets": snippets,
-            "full_context": combined_text[:max_chars]  # NEW FIELD
+            "snippets": snippets
         })
 
     return compressed
