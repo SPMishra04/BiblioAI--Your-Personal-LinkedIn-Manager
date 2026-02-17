@@ -195,7 +195,7 @@ def prepare_chain_input(user_id: str, user_query: str, reasoning: str, websearch
         query=user_query
     )
 
-    # 2. ✅ SAFE conversion (THIS is the line you asked about)
+    
     memory_context = "\n".join(past_memories)
 
     # 3. Return input dict for chain
@@ -219,7 +219,6 @@ def run_formatting(hook: str, body: str):
         }
     )
 
-########### new one below
 
 memory_cleaner_prompt = PromptTemplate(
     input_variables=["text"],
