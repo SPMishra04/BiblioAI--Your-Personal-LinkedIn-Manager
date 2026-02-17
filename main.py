@@ -31,7 +31,7 @@ class SearchService:
             return results
 
         except Exception as e:
-            print(f"⚠️ Tavily search failed: {e}")
+            print(f" Tavily search failed: {e}")
             return []
 
 def main():
@@ -44,7 +44,7 @@ def main():
     # Reset memory
     if user_query.lower() == "reset":
         memory_store.clear_user_memory(user_id)
-        print("✅ Memory cleared. Start fresh.")
+        print(" Memory cleared. Start fresh.")
         return
     
     past_memories = memory_store.get_relevant_memory(
