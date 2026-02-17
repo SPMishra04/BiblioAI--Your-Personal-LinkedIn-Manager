@@ -3,6 +3,8 @@ from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
 from langchain_core.output_parsers import PydanticOutputParser
 from config import GROQ_API_KEY, MODEL_NAME, TEMPERATURE
 from schema import RestrictedCheck, LinkedInTrainer
+import ast
+from typing import List, Union
 
 
 llm = ChatGroq(
@@ -148,11 +150,6 @@ def format_search_query(user_query, websearch_key, reasoning):
     
     
 
-
-
-
-
-
 fact_check_search_query_prompt = PromptTemplate(
     input_variables=["search_query", "reasoning"],
     template="""
@@ -176,10 +173,6 @@ Reasoning Context:
 {reasoning}
 """
 )
-
-import re
-import ast
-from typing import List, Union
 
 def fact_check_search_queries(search_query, reasoning):
     response = llm.invoke(
@@ -262,5 +255,3 @@ def linkedin_trainer(
 
     response = llm.invoke(prompt)
     return trainer_parser.parse(response.content)
-
-
