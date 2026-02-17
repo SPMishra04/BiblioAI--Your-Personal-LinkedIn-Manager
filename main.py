@@ -161,6 +161,7 @@ Conversation:
 
             print("\nReferences:\n")
             seen_urls = set()
+            count = 0
 
             for item in web_results:
                 for snip in item.get("snippets", []):
@@ -171,8 +172,13 @@ Conversation:
                         print(f"• {title}")
                         print(f"  {url}")
                         seen_urls.add(url)
-
-            return
+                        count += 1
+                        if count >= MAX_LINKS_PER_TOPIC_FACTCHECK:
+                            break  # stop inner loop
+                if count >= MAX_LINKS_PER_TOPIC_FACTCHECK:
+                    break  # stop outer loop
+                
+            return    
 
         print("\nFact Verified — Proceeding to Post Generation\n")
 
@@ -240,10 +246,11 @@ Conversation:
                     seen_urls.add(url)
                     count += 1
 
-                if count == MAX_LINKS_PER_TOPIC_FACTCHECK:
+                if count >= MAX_LINKS_PER_TOPIC_FACTCHECK:
+
                     break
 
-            if count == MAX_LINKS_PER_TOPIC_FACTCHECK:
+            if count >= MAX_LINKS_PER_TOPIC_FACTCHECK:
                 break
 
             output_text.append("")
@@ -280,10 +287,10 @@ Conversation:
                     seen_urls.add(url)
                     count += 1
 
-                if count == MAX_LINKS_PER_TOPIC_NORMAL:
+                if count >= MAX_LINKS_PER_TOPIC_NORMAL:
                     break
 
-            if count == MAX_LINKS_PER_TOPIC_NORMAL:
+            if count >= MAX_LINKS_PER_TOPIC_NORMAL:
                 break
 
             output_text.append("")
