@@ -75,7 +75,7 @@ class MemoryStore:
 
         query_embedding = self.embedder.encode(query).tolist()
 
-        results = self.collection.query(
+        results = self.collection.query(            # It searches the vector database for the top-k most similar memories belonging to that specific user.
             query_embeddings=[query_embedding],
             n_results=k,
             where={"user_id": user_id}
